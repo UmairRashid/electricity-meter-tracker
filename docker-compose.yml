@@ -1,0 +1,76 @@
+services:
+  database:
+    image: postgres:15-alpine
+    container_name: meter_tracker_db
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - meter_network
+
+  backend:
+    build: ./backend
+    container_name: meter_tracker_backend
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - BACKEND_HOST=${BACKEND_HOST}
+      - BACKEND_PORT=${BACKEND_PORT}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+      - MONTHLY_LIMIT_PER_METER=${MONTHLY_LIMIT_PER_METER}
+      - TOTAL_MONTHLY_LIMIT=${TOTAL_MONTHLY_LIMIT}
+      - DAYS_IN_MONTH=${DAYS_IN_MONTH}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./backend:/app
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - meter_network
+
+  frontend:
+    build: ./frontend
+    container_name: meter_tracker_frontend
+    environment:
+      - VITE_API_URL=${VITE_API_URL}
+      - PORT=${FRONTEND_PORT}
+      - HOSTNAME=${HOSTNAME}
+    ports:
+      - "0.0.0.0:${FRONTEND_PORT}:${FRONTEND_PORT}"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - meter_network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  meter_network:
+    driver: bridge
