@@ -74,6 +74,7 @@ emt stop       # Stop application gracefully (creates automatic backup)
 emt restart    # Restart entire application
 emt status     # Show detailed status, resource usage, and URLs
 emt logs       # View application logs (live or historical)
+emt backup     # Create database backup on-demand
 emt restore    # Restore database from backup (with confirmation)
 emt help       # Show comprehensive help information
 ```
@@ -97,6 +98,9 @@ emt status
 
 # Stop with automatic backup
 emt stop
+
+# Create backup manually
+emt backup
 
 # Restore from backup if needed
 emt restore
@@ -217,6 +221,9 @@ The application automatically creates database backups:
 ```bash
 # Stop application (creates backup automatically)
 emt stop
+
+# Create backup manually at any time
+emt backup
 
 # Restore from backup (with confirmation)
 emt restore
