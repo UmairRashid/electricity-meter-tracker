@@ -166,3 +166,197 @@ body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Mobile Responsive Design */
+@media screen and (max-width: 768px) {
+  .container {
+    max-width: 95%;
+    padding: 15px;
+  }
+
+  .header h1 {
+    font-size: 24px;
+    margin-bottom: 20px;
+  }
+
+  .nav {
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 25px;
+  }
+
+  .nav a {
+    padding: 12px 20px;
+    font-size: 16px;
+    text-align: center;
+  }
+
+  .form-container {
+    padding: 20px;
+    margin-bottom: 15px;
+  }
+
+  .meter-inputs {
+    gap: 15px;
+    margin-bottom: 25px;
+  }
+
+  .input-group input {
+    padding: 12px;
+    font-size: 16px;
+    min-height: 44px; /* Better touch targets */
+  }
+
+  .submit-btn {
+    padding: 15px;
+    font-size: 18px;
+    min-height: 50px; /* Better touch targets */
+  }
+
+  .filter-container {
+    padding: 15px;
+    margin-bottom: 15px;
+  }
+
+  .filter-buttons {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .filter-btn {
+    padding: 12px 16px;
+    font-size: 16px;
+    min-height: 44px; /* Better touch targets */
+  }
+
+  .chart-container {
+    padding: 15px;
+  }
+
+  /* Mobile-specific grid layouts */
+  .mobile-grid-1 {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .mobile-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+  }
+
+  /* Card adjustments for mobile */
+  .mobile-card {
+    padding: 15px;
+    font-size: 14px;
+  }
+
+  .mobile-card h4 {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+
+  .mobile-card p {
+    font-size: 18px;
+  }
+
+  /* Alert banners mobile */
+  .alert-banner-mobile {
+    padding: 12px;
+    margin: 8px 0;
+    font-size: 14px;
+  }
+
+  /* Progress bar mobile adjustments */
+  .progress-container-mobile {
+    margin-bottom: 12px;
+  }
+
+  .progress-container-mobile .progress-label {
+    font-size: 14px;
+    margin-bottom: 3px;
+  }
+
+  .progress-container-mobile .progress-label span:last-child {
+    font-size: 12px;
+  }
+
+  /* Navigation improvements for mobile */
+  .nav-mobile {
+    position: sticky;
+    top: 0;
+    background: #f5f5f5;
+    z-index: 100;
+    padding: 10px 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  /* Charts responsive */
+  .chart-container canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* Make text more readable on mobile */
+  body {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  h1, h2, h3, h4 {
+    line-height: 1.3;
+  }
+
+  /* Improve form spacing on mobile */
+  .input-group {
+    margin-bottom: 20px;
+  }
+
+  /* Better spacing for success/error messages */
+  .success-message, .error-message {
+    padding: 12px;
+    font-size: 14px;
+    margin-bottom: 15px;
+  }
+
+  /* Hide charts on mobile */
+  .mobile-hide-charts {
+    display: none;
+  }
+}
+
+/* Tablet responsive design */
+@media screen and (min-width: 769px) and (max-width: 1024px) {
+  .container {
+    max-width: 80%;
+    padding: 18px;
+  }
+
+  .tablet-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+
+  .tablet-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 18px;
+  }
+}
+
+/* Desktop - maintain existing styles */
+@media screen and (min-width: 1025px) {
+  .desktop-grid-6 {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 15px;
+  }
+
+  .desktop-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+}

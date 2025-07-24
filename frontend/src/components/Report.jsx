@@ -115,8 +115,8 @@ function Report() {
   const ProgressBar = ({ label, current, limit, color }) => {
     const percentage = Math.min((current / limit) * 100, 100)
     return (
-      <div style={{ marginBottom: '15px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+      <div className="progress-container-mobile" style={{ marginBottom: '15px' }}>
+        <div className="progress-label" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 'bold' }}>{label}</span>
           <span>{current}/{limit} units ({percentage.toFixed(1)}%)</span>
         </div>
@@ -150,7 +150,7 @@ function Report() {
     const color = colors[type] || colors.info
     
     return (
-      <div style={{
+      <div className="alert-banner-mobile" style={{
         padding: '15px',
         margin: '10px 0',
         backgroundColor: color.bg,
@@ -323,8 +323,8 @@ function Report() {
           <p><strong>Base Date:</strong> {usageMetrics.tracking_period?.base_date || 'N/A'} | <strong>Current Date:</strong> {usageMetrics.tracking_period?.current_date || 'N/A'}</p>
           
           {/* Summary Cards */}
-          <div style={{display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '15px', marginTop: '20px'}}>
-            <div style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
+          <div className="desktop-grid-6 tablet-grid-3 mobile-grid-2" style={{marginTop: '20px'}}>
+            <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
               <h4 style={{color: '#333', margin: '0 0 10px 0'}}>Total Consumed</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: getUsageColor(usageMetrics.usage_percentage?.total || 0)}}>
                 {usageMetrics.total_consumed?.total || 0}
@@ -332,7 +332,7 @@ function Report() {
               <p style={{color: '#666', margin: '5px 0 0 0'}}>of 600 units</p>
             </div>
             
-            <div style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
+            <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
               <h4 style={{color: '#333', margin: '0 0 10px 0'}}>Remaining</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: (usageMetrics.remaining?.total || 0) > 0 ? '#28a745' : '#dc3545'}}>
                 {usageMetrics.remaining?.total || 0}
@@ -340,7 +340,7 @@ function Report() {
               <p style={{color: '#666', margin: '5px 0 0 0'}}>units left</p>
             </div>
             
-            <div style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
+            <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
               <h4 style={{color: '#333', margin: '0 0 10px 0'}}>Daily Average Used</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#17a2b8'}}>
                 {usageMetrics.daily_avg_used?.total || 0}
@@ -348,7 +348,7 @@ function Report() {
               <p style={{color: '#666', margin: '5px 0 0 0'}}>units/day</p>
             </div>
             
-            <div style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
+            <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
               <h4 style={{color: '#333', margin: '0 0 10px 0'}}>Daily Average Remaining</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#6c757d'}}>
                 {usageMetrics.daily_avg_remaining?.total || 0}
@@ -356,7 +356,7 @@ function Report() {
               <p style={{color: '#666', margin: '5px 0 0 0'}}>units/day</p>
             </div>
             
-            <div style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
+            <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
               <h4 style={{color: '#333', margin: '0 0 10px 0'}}>Days Elapsed</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#343a40'}}>
                 {usageMetrics.tracking_period?.days_elapsed || 0}
@@ -364,7 +364,7 @@ function Report() {
               <p style={{color: '#666', margin: '5px 0 0 0'}}>days passed</p>
             </div>
             
-            <div style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
+            <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
               <h4 style={{color: '#333', margin: '0 0 10px 0'}}>Days Remaining</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#495057'}}>
                 {usageMetrics.tracking_period?.days_remaining || 0}
@@ -411,22 +411,22 @@ function Report() {
         
         {/* Individual Meter Cards */}
         {usageMetrics && !usageError && (
-          <div style={{display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '30px'}}>
-            <div style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
+          <div className="desktop-grid-3 tablet-grid-3 mobile-grid-1" style={{marginBottom: '30px'}}>
+            <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
               <h4 style={{color: 'rgb(255, 99, 132)', margin: '0 0 10px 0'}}>Meter 1 (SinglePhase New)</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#000'}}>
                 {usageMetrics.total_consumed?.meter1 || 0}
               </p>
             </div>
             
-            <div style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
+            <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
               <h4 style={{color: 'rgb(54, 162, 235)', margin: '0 0 10px 0'}}>Meter 2 (SinglePhase Old)</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#000'}}>
                 {usageMetrics.total_consumed?.meter2 || 0}
               </p>
             </div>
             
-            <div style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
+            <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
               <h4 style={{color: 'rgb(255, 205, 86)', margin: '0 0 10px 0'}}>Meter 3 (ThreePhase)</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#000'}}>
                 {usageMetrics.total_consumed?.meter3 || 0}
@@ -441,10 +441,12 @@ function Report() {
           <p>Error loading readings data: {readingsError}</p>
         ) : readings.length > 0 && totalChartData && dailyChartData ? (
           <>
-            <Line data={totalChartData} options={totalChartOptions} />
-            
-            <div style={{marginTop: '40px'}}>
-              <Bar data={dailyChartData} options={dailyChartOptions} />
+            <div className="mobile-hide-charts">
+              <Line data={totalChartData} options={totalChartOptions} />
+              
+              <div style={{marginTop: '40px'}}>
+                <Bar data={dailyChartData} options={dailyChartOptions} />
+              </div>
             </div>
           </>
         ) : (
