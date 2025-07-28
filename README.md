@@ -142,7 +142,7 @@ TRUSTED_HOSTS=your.local.ip,your-hostname.local
 # Usage Tracking Configuration
 MONTHLY_LIMIT_PER_METER=200
 TOTAL_MONTHLY_LIMIT=600
-DAYS_IN_MONTH=30
+# Note: Uses same-date monthly cycles (e.g., 4th to 4th of each month)
 ```
 
 ### Manual Setup (without Docker)
@@ -199,7 +199,7 @@ npm run dev
 4. View detailed charts:
    - **Total Consumption Over Time**: Cumulative consumption from base date
    - **Daily Usage**: Units consumed each day (stacked bars)
-5. **Monthly Tracking**: 30-day cycles based on base reading date (not calendar months)
+5. **Monthly Tracking**: Same-date monthly cycles (e.g., 4th to 4th of each month) based on base reading date
 6. Each meter is displayed in a different color for easy identification
 
 ### Data Management
@@ -238,7 +238,7 @@ emt restore
 - `GET /readings/latest` - Get the most recent readings
 - `GET /consumption-summary` - Get consumption summary and totals
 - `GET /readings/dates` - Get all available reading dates for deletion
-- `GET /usage-metrics` - Get comprehensive monthly usage metrics with 30-day cycle tracking
+- `GET /usage-metrics` - Get comprehensive monthly usage metrics with same-date monthly cycle tracking
 - `DELETE /readings/{date}` - Delete reading for a specific date
 - `DELETE /readings/delete-old-data` - Delete readings older than specified date
 - `GET /health` - Health check endpoint for monitoring

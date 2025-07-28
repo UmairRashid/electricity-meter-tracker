@@ -6,6 +6,8 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Date
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime, timedelta, date
+from dateutil.relativedelta import relativedelta
+import calendar
 from typing import List, Optional
 import os
 from dotenv import load_dotenv
@@ -324,7 +326,6 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
     # Constants from environment variables
     MONTHLY_LIMIT_PER_METER = int(os.getenv("MONTHLY_LIMIT_PER_METER", "200"))
     TOTAL_MONTHLY_LIMIT = int(os.getenv("TOTAL_MONTHLY_LIMIT", "600"))
-    DAYS_IN_MONTH = int(os.getenv("DAYS_IN_MONTH", "30"))
     
     # Get base reading
     base_reading = db.query(BaseReading).order_by(BaseReading.created_at.desc()).first()
@@ -333,21 +334,32 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
         return {"error": "No base readings found"}
     
     # Use base_date as the start of the monthly cycle
-    month_start_date = base_reading.base_date
+    base_date = base_reading.base_date
     current_date = datetime.now().date()
     
-    # Calculate current month cycle (base_date + 30 days cycles)
-    days_since_base = (current_date - month_start_date).days
-    current_month_cycle = days_since_base // DAYS_IN_MONTH
+    # Calculate current monthly cycle (same date to same date)
+    current_month_cycle = 0
+    temp_date = base_date
     
-    # Calculate current month boundaries
-    current_month_start = month_start_date + timedelta(days=current_month_cycle * DAYS_IN_MONTH)
-    current_month_end = current_month_start + timedelta(days=DAYS_IN_MONTH - 1)
+    # Find which monthly cycle we're currently in
+    while temp_date <= current_date:
+        next_month_start = temp_date + relativedelta(months=1)
+        if current_date < next_month_start:
+            break
+        current_month_cycle += 1
+        temp_date = next_month_start
     
-    # Get readings for current month cycle only
+    # Calculate current month boundaries (same date to same date)
+    current_month_start = base_date + relativedelta(months=current_month_cycle)
+    current_month_end = current_month_start + relativedelta(months=1)
+    
+    # Calculate actual days in current monthly cycle (from start date to end date, inclusive of end date)
+    days_in_current_month = (current_month_end - current_month_start).days + 1
+    
+    # Get readings for current month cycle only (from start date up to but not including end date)
     readings = db.query(MeterReading).filter(
         MeterReading.reading_date >= current_month_start,
-        MeterReading.reading_date <= min(current_date, current_month_end)
+        MeterReading.reading_date < min(current_date + timedelta(days=1), current_month_end)
     ).order_by(MeterReading.reading_date.asc()).all()
     
     # Get base consumption for current month (consumption at start of current month)
@@ -403,9 +415,9 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
             "meter3": reading.meter3_consumption
         }
     
-    # Calculate days in current month cycle
+    # Calculate days in current monthly cycle (same date to same date)
     days_elapsed_in_month = (current_date - current_month_start).days + 1
-    days_remaining_in_month = max(0, DAYS_IN_MONTH - days_elapsed_in_month)
+    days_remaining_in_month = max(0, days_in_current_month - days_elapsed_in_month)
     
     # Remaining units in current month
     remaining = {
@@ -439,12 +451,12 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
         "total": round((monthly_consumed["total"] / TOTAL_MONTHLY_LIMIT) * 100, 1)
     }
     
-    # Monthly projection for current month
+    # Monthly projection for current calendar month
     monthly_projection = {
-        "meter1": round(daily_avg_used["meter1"] * DAYS_IN_MONTH, 1),
-        "meter2": round(daily_avg_used["meter2"] * DAYS_IN_MONTH, 1),
-        "meter3": round(daily_avg_used["meter3"] * DAYS_IN_MONTH, 1),
-        "total": round(daily_avg_used["total"] * DAYS_IN_MONTH, 1)
+        "meter1": round(daily_avg_used["meter1"] * days_in_current_month, 1),
+        "meter2": round(daily_avg_used["meter2"] * days_in_current_month, 1),
+        "meter3": round(daily_avg_used["meter3"] * days_in_current_month, 1),
+        "total": round(daily_avg_used["total"] * days_in_current_month, 1)
     }
     
     # Days until limit reached in current month
@@ -461,7 +473,7 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
     
     # Efficiency score (how well you're pacing for the month)
     efficiency_score = {}
-    month_progress_percentage = (days_elapsed_in_month / DAYS_IN_MONTH) * 100
+    month_progress_percentage = (days_elapsed_in_month / days_in_current_month) * 100
     for meter in ["meter1", "meter2", "meter3", "total"]:
         efficiency_score[meter] = round(100 - (usage_percentage[meter] - month_progress_percentage), 1)
     
@@ -469,16 +481,17 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
         "limits": {
             "per_meter": MONTHLY_LIMIT_PER_METER,
             "total": TOTAL_MONTHLY_LIMIT,
-            "days_in_month": DAYS_IN_MONTH
+            "days_in_month": days_in_current_month
         },
         "tracking_period": {
-            "base_date": month_start_date.strftime("%Y-%m-%d"),
+            "base_date": base_date.strftime("%Y-%m-%d"),
             "current_month_start": current_month_start.strftime("%Y-%m-%d"),
-            "current_month_end": current_month_end.strftime("%Y-%m-%d"),
+            "current_month_end": (current_month_end - timedelta(days=1)).strftime("%Y-%m-%d"),
             "current_date": current_date.strftime("%Y-%m-%d"),
             "month_cycle": current_month_cycle + 1,
             "days_elapsed": days_elapsed_in_month,
-            "days_remaining": days_remaining_in_month
+            "days_remaining": days_remaining_in_month,
+            "cycle_description": f"{current_month_start.strftime('%B %d')} - {(current_month_end - timedelta(days=1)).strftime('%B %d, %Y')}"
         },
         "total_consumed": monthly_consumed,
         "remaining": remaining,

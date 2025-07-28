@@ -32,7 +32,6 @@ services:
       - CORS_ORIGINS=${CORS_ORIGINS}
       - MONTHLY_LIMIT_PER_METER=${MONTHLY_LIMIT_PER_METER}
       - TOTAL_MONTHLY_LIMIT=${TOTAL_MONTHLY_LIMIT}
-      - DAYS_IN_MONTH=${DAYS_IN_MONTH}
       - PYTHONUNBUFFERED=1
     volumes:
       - ./backend:/app
