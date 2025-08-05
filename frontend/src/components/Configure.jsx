@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { fetchBaseReadings, setBaseReadings, deleteOldData, deleteReadingByDate, fetchReadingDates } from '../utils/api'
+import { fetchBaseReadings, setBaseReadings as submitBaseReadings, deleteOldData, deleteReadingByDate, fetchReadingDates } from '../utils/api'
 import { useApiMutation } from '../hooks/useApi'
 import { validateBaseReadings } from '../utils/validation'
 import LoadingSpinner from './common/LoadingSpinner'
@@ -84,10 +84,30 @@ function Configure() {
         base_date: baseReadings.base_date
       }
 
-      await submitBaseMutation(setBaseReadings, baseData)
+      await submitBaseMutation(submitBaseReadings, baseData)
       setMessage('Base readings configured successfully!')
       setMessageType('success')
-      fetchCurrentBaseReadings()
+      
+      // Update the current base readings state immediately with the new data
+      setCurrentBaseReadings({
+        meter1_base: validation.values.meter1,
+        meter2_base: validation.values.meter2,
+        meter3_base: validation.values.meter3,
+        base_date: baseReadings.base_date
+      })
+      
+      // Clear the form after successful submission
+      setBaseReadings({
+        meter1_base: '',
+        meter2_base: '',
+        meter3_base: '',
+        base_date: new Date().toISOString().split('T')[0]
+      })
+      
+      // Also fetch from server to ensure consistency
+      setTimeout(() => {
+        fetchCurrentBaseReadings()
+      }, 500)
     } catch (error) {
       setMessage(error.message || 'Error setting base readings. Please try again.')
       setMessageType('error')

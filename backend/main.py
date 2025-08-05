@@ -466,7 +466,7 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
             limit = MONTHLY_LIMIT_PER_METER if meter != "total" else TOTAL_MONTHLY_LIMIT
             days_until_limit[meter] = max(0, round((limit - monthly_consumed[meter]) / daily_avg_used[meter], 1))
         else:
-            days_until_limit[meter] = float('inf')
+            days_until_limit[meter] = 999999
     
     # Peak usage day in current month
     peak_day = max(daily_usage, key=lambda x: x["total"]) if daily_usage else None
