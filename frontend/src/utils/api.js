@@ -40,6 +40,7 @@ export const fetchBaseReadings = () => apiCall('/base-readings/latest')
 export const fetchConsumptionSummary = () => apiCall('/consumption-summary')
 export const fetchUsageMetrics = () => apiCall('/usage-metrics')
 export const fetchReadingDates = () => apiCall('/readings/dates')
+export const fetchReadingByDate = (date) => apiCall(`/readings/${date}`)
 
 export const submitReadings = (readings) => apiCall('/readings', {
   method: 'POST',

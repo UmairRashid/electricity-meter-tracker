@@ -505,6 +505,33 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
         "efficiency_score": efficiency_score
     }
 
+@app.get("/readings/{date}")
+async def get_reading_by_date(date: str, db: Session = Depends(get_db)):
+    try:
+        # Parse date string to date object
+        parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+        
+        # Find the reading for the specific date
+        reading = db.query(MeterReading).filter(MeterReading.reading_date == parsed_date).first()
+        
+        if not reading:
+            raise HTTPException(status_code=404, detail=f"No reading found for date {date}")
+        
+        return {
+            "reading_date": reading.reading_date.strftime("%Y-%m-%d"),
+            "meter1_current": reading.meter1_current,
+            "meter2_current": reading.meter2_current,
+            "meter3_current": reading.meter3_current,
+            "meter1_consumption": reading.meter1_consumption,
+            "meter2_consumption": reading.meter2_consumption,
+            "meter3_consumption": reading.meter3_consumption,
+            "timestamp": reading.timestamp
+        }
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching reading: {str(e)}")
+
 @app.delete("/readings/{date}")
 async def delete_reading_by_date(date: str, db: Session = Depends(get_db)):
     try:

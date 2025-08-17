@@ -11,7 +11,7 @@ import {
   Legend,
 } from 'chart.js'
 import { Line, Bar } from 'react-chartjs-2'
-import { fetchReadings, fetchConsumptionSummary, fetchUsageMetrics } from '../utils/api'
+import { fetchReadings, fetchConsumptionSummary, fetchUsageMetrics, fetchReadingDates, fetchReadingByDate } from '../utils/api'
 import { useApi } from '../hooks/useApi'
 import LoadingSpinner from './common/LoadingSpinner'
 
@@ -30,6 +30,13 @@ function Report() {
   const { data: readings = [], loading: readingsLoading, error: readingsError } = useApi(fetchReadings)
   const { data: consumptionSummary, loading: consumptionLoading, error: consumptionError } = useApi(fetchConsumptionSummary)
   const { data: usageMetrics, loading: usageLoading, error: usageError } = useApi(fetchUsageMetrics)
+  const { data: readingDates, loading: datesLoading, error: datesError } = useApi(fetchReadingDates)
+
+  // State for meter reading lookup
+  const [selectedDate, setSelectedDate] = useState('')
+  const [selectedReading, setSelectedReading] = useState(null)
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [lookupError, setLookupError] = useState('')
 
   const isLoading = readingsLoading || consumptionLoading || usageLoading
   const hasError = readingsError || consumptionError || usageError
@@ -94,6 +101,35 @@ function Report() {
   }
 
   const dailyConsumption = getDailyConsumption()
+
+  // Handle date selection for meter reading lookup
+  const handleDateSelection = async (date) => {
+    if (!date) {
+      setSelectedReading(null)
+      setLookupError('')
+      return
+    }
+
+    setLookupLoading(true)
+    setLookupError('')
+    setSelectedReading(null)
+
+    try {
+      const reading = await fetchReadingByDate(date)
+      setSelectedReading(reading)
+    } catch (error) {
+      setLookupError(error.message || 'Failed to fetch reading for selected date')
+    } finally {
+      setLookupLoading(false)
+    }
+  }
+
+  // Handle date change
+  const handleDateChange = (e) => {
+    const date = e.target.value
+    setSelectedDate(date)
+    handleDateSelection(date)
+  }
 
   // Helper function to get color based on usage percentage
   const getUsageColor = (percentage) => {
@@ -405,6 +441,35 @@ function Report() {
       )}
 
 
+      {/* Meter Information */}
+      <div className="chart-container" style={{marginTop: '30px'}}>
+        <h3 style={{marginBottom: '20px'}}>Meter Information</h3>
+        <div className="mobile-card" style={{
+          background: '#f8f9fa',
+          padding: '20px',
+          borderRadius: '10px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          marginBottom: '30px',
+          maxWidth: '800px',
+          margin: '0 auto 30px auto'
+        }}>
+          <ul style={{listStyle: 'none', padding: '0', margin: '0'}}>
+            <li style={{padding: '10px 0', borderBottom: '1px solid #e9ecef'}}>
+              <span style={{color: 'rgb(255, 99, 132)', fontWeight: 'bold'}}>Meter 1:</span> SinglePhase (New) - Switch: 100
+            </li>
+            <li style={{padding: '10px 0', borderBottom: '1px solid #e9ecef'}}>
+              <span style={{color: 'rgb(54, 162, 235)', fontWeight: 'bold'}}>Meter 2:</span> SinglePhase (Old) - Switch: 202
+            </li>
+            <li style={{padding: '10px 0', borderBottom: '1px solid #e9ecef'}}>
+              <span style={{color: 'rgb(255, 205, 86)', fontWeight: 'bold'}}>Meter 3:</span> ThreePhase - Switch: 2N1 (N = phase)
+            </li>
+            <li style={{padding: '10px 0'}}>
+              <span style={{color: '#28a745', fontWeight: 'bold'}}>Generator Switch Setting:</span> 241
+            </li>
+          </ul>
+        </div>
+      </div>
+
       {/* Original Charts */}
       <div className="chart-container" style={{marginTop: '30px'}}>
         <h3 style={{marginBottom: '30px'}}>Detailed Usage Charts</h3>
@@ -413,21 +478,21 @@ function Report() {
         {usageMetrics && !usageError && (
           <div className="desktop-grid-3 tablet-grid-3 mobile-grid-1" style={{marginBottom: '30px'}}>
             <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
-              <h4 style={{color: 'rgb(255, 99, 132)', margin: '0 0 10px 0'}}>Meter 1 (SinglePhase New)</h4>
+              <h4 style={{color: 'rgb(255, 99, 132)', margin: '0 0 10px 0'}}>Meter 1</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#000'}}>
                 {usageMetrics.total_consumed?.meter1 || 0}
               </p>
             </div>
             
             <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
-              <h4 style={{color: 'rgb(54, 162, 235)', margin: '0 0 10px 0'}}>Meter 2 (SinglePhase Old)</h4>
+              <h4 style={{color: 'rgb(54, 162, 235)', margin: '0 0 10px 0'}}>Meter 2</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#000'}}>
                 {usageMetrics.total_consumed?.meter2 || 0}
               </p>
             </div>
             
             <div className="mobile-card" style={{background: '#e9ecef', padding: '20px', borderRadius: '10px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', textAlign: 'center'}}>
-              <h4 style={{color: 'rgb(255, 205, 86)', margin: '0 0 10px 0'}}>Meter 3 (ThreePhase)</h4>
+              <h4 style={{color: 'rgb(255, 205, 86)', margin: '0 0 10px 0'}}>Meter 3</h4>
               <p style={{fontSize: '24px', fontWeight: 'bold', margin: '0', color: '#000'}}>
                 {usageMetrics.total_consumed?.meter3 || 0}
               </p>
@@ -452,6 +517,138 @@ function Report() {
         ) : (
           <p>No consumption data available. Set base readings and add some daily readings first!</p>
         )}
+      </div>
+
+      {/* Meter Reading Lookup Section */}
+      <div className="chart-container" style={{marginTop: '40px'}}>
+        <h3 style={{marginBottom: '20px'}}>Meter Reading Lookup</h3>
+        <p style={{color: '#666', marginBottom: '20px'}}>Select a date to view the actual meter readings for that specific day.</p>
+        
+        <div className="filter-container">
+          <div style={{marginBottom: '20px'}}>
+            <label htmlFor="date-select" style={{display: 'block', marginBottom: '10px', fontWeight: 'bold'}}>
+              Select Date:
+            </label>
+            <select
+              id="date-select"
+              value={selectedDate}
+              onChange={handleDateChange}
+              style={{
+                padding: '10px',
+                fontSize: '16px',
+                border: '2px solid #ddd',
+                borderRadius: '5px',
+                width: '200px',
+                backgroundColor: 'white'
+              }}
+              disabled={datesLoading}
+            >
+              <option value="">-- Choose a date --</option>
+              {readingDates?.dates?.map(date => (
+                <option key={date} value={date}>
+                  {date}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {lookupLoading && (
+            <LoadingSpinner message="Loading reading data..." />
+          )}
+
+          {lookupError && (
+            <div style={{
+              padding: '15px',
+              backgroundColor: '#f8d7da',
+              border: '1px solid #f5c6cb',
+              borderRadius: '5px',
+              color: '#721c24',
+              marginBottom: '20px'
+            }}>
+              Error: {lookupError}
+            </div>
+          )}
+
+          {selectedReading && !lookupLoading && (
+            <div className="mobile-card" style={{
+              background: '#e9ecef',
+              padding: '25px',
+              borderRadius: '10px',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+              maxWidth: '800px',
+              margin: '0 auto'
+            }}>
+              <h4 style={{color: '#333', marginBottom: '20px', textAlign: 'center'}}>
+                Meter Readings for {selectedReading.reading_date}
+              </h4>
+              
+              <div className="desktop-grid-3 tablet-grid-3 mobile-grid-1" style={{gap: '15px'}}>
+                <div style={{
+                  background: 'white',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  border: '2px solid rgb(255, 99, 132)'
+                }}>
+                  <h5 style={{color: 'rgb(255, 99, 132)', margin: '0 0 10px 0'}}>Meter 1</h5>
+                  <p style={{fontSize: '20px', fontWeight: 'bold', margin: '5px 0', color: '#000'}}>
+                    Current: {selectedReading.meter1_current}
+                  </p>
+                  <p style={{fontSize: '16px', margin: '5px 0', color: '#666'}}>
+                    Consumed: {selectedReading.meter1_consumption} units
+                  </p>
+                </div>
+                
+                <div style={{
+                  background: 'white',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  border: '2px solid rgb(54, 162, 235)'
+                }}>
+                  <h5 style={{color: 'rgb(54, 162, 235)', margin: '0 0 10px 0'}}>Meter 2</h5>
+                  <p style={{fontSize: '20px', fontWeight: 'bold', margin: '5px 0', color: '#000'}}>
+                    Current: {selectedReading.meter2_current}
+                  </p>
+                  <p style={{fontSize: '16px', margin: '5px 0', color: '#666'}}>
+                    Consumed: {selectedReading.meter2_consumption} units
+                  </p>
+                </div>
+                
+                <div style={{
+                  background: 'white',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  textAlign: 'center',
+                  border: '2px solid rgb(255, 205, 86)'
+                }}>
+                  <h5 style={{color: 'rgb(255, 205, 86)', margin: '0 0 10px 0'}}>Meter 3</h5>
+                  <p style={{fontSize: '20px', fontWeight: 'bold', margin: '5px 0', color: '#000'}}>
+                    Current: {selectedReading.meter3_current}
+                  </p>
+                  <p style={{fontSize: '16px', margin: '5px 0', color: '#666'}}>
+                    Consumed: {selectedReading.meter3_consumption} units
+                  </p>
+                </div>
+              </div>
+              
+              <div style={{
+                marginTop: '20px',
+                padding: '15px',
+                background: 'white',
+                borderRadius: '8px',
+                textAlign: 'center'
+              }}>
+                <p style={{margin: '5px 0', color: '#666'}}>
+                  <strong>Total Consumed:</strong> {(selectedReading.meter1_consumption + selectedReading.meter2_consumption + selectedReading.meter3_consumption).toLocaleString()} units
+                </p>
+                <p style={{margin: '5px 0', fontSize: '14px', color: '#999'}}>
+                  Reading taken at: {new Date(selectedReading.timestamp).toLocaleTimeString()}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
