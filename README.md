@@ -7,6 +7,8 @@ A microservices-based web application to track daily electricity meter readings 
 - **Home Page**: Enter daily readings for three electric meters
 - **Configure Page**: Set base meter readings for consumption tracking
 - **Report Page**: Advanced usage dashboard with consumption charts and monthly tracking
+- **Meter Reading Lookup**: Select any date to view actual meter readings and consumption values
+- **Meter Information**: Reference section with switch settings and generator configuration
 - **Monthly Usage Limits**: Track 200 units per meter with visual progress indicators
 - **Consumption Tracking**: Track units consumed from base readings (not raw meter readings)
 - **Usage Analytics**: Daily averages, remaining units, and efficiency scoring
@@ -195,12 +197,19 @@ npm run dev
    - **Summary Cards**: Total Consumed, Remaining, Daily Averages, Days Elapsed/Remaining
    - **Progress Bars**: Visual progress for each meter with color-coded alerts
    - **Usage Alerts**: Automatic warnings at 70%, 80%, 90% usage thresholds
-3. View **Individual Meter Cards** showing current usage for each meter
-4. View detailed charts:
+3. View **Meter Information** section with:
+   - **Switch Settings**: Meter 1 (100), Meter 2 (202), Meter 3 (2N1), Generator (241)
+   - **Type Information**: SinglePhase New/Old, ThreePhase specifications
+4. View **Individual Meter Cards** showing current usage for each meter
+5. View detailed charts:
    - **Total Consumption Over Time**: Cumulative consumption from base date
    - **Daily Usage**: Units consumed each day (stacked bars)
-5. **Monthly Tracking**: Same-date monthly cycles (e.g., 4th to 4th of each month) based on base reading date
-6. Each meter is displayed in a different color for easy identification
+6. Use **Meter Reading Lookup** to:
+   - **Select any date** from the dropdown to view historical readings
+   - **View actual meter readings** and consumption values for that specific day
+   - **See timestamp** when the reading was recorded
+7. **Monthly Tracking**: Same-date monthly cycles (e.g., 4th to 4th of each month) based on base reading date
+8. Each meter is displayed in a different color for easy identification
 
 ### Data Management
 1. Go to the Configure page (/configure)
@@ -236,8 +245,9 @@ emt restore
 - `POST /readings` - Submit new daily meter readings
 - `GET /readings` - Get all readings from base date forward
 - `GET /readings/latest` - Get the most recent readings
+- `GET /readings/{date}` - **NEW**: Get specific date reading with actual meter values and consumption
+- `GET /readings/dates` - Get all available reading dates for lookup and deletion
 - `GET /consumption-summary` - Get consumption summary and totals
-- `GET /readings/dates` - Get all available reading dates for deletion
 - `GET /usage-metrics` - Get comprehensive monthly usage metrics with same-date monthly cycle tracking
 - `DELETE /readings/{date}` - Delete reading for a specific date
 - `DELETE /readings/delete-old-data` - Delete readings older than specified date
