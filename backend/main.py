@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Date
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from dateutil.relativedelta import relativedelta
 import calendar
 from typing import List, Optional
@@ -253,7 +253,7 @@ async def get_readings(db: Session = Depends(get_db)):
             "meter1_consumption": reading.meter1_consumption,
             "meter2_consumption": reading.meter2_consumption,
             "meter3_consumption": reading.meter3_consumption,
-            "timestamp": reading.timestamp
+            "timestamp": reading.timestamp.replace(tzinfo=timezone.utc).isoformat()
         }
         for reading in readings
     ]
@@ -542,7 +542,7 @@ async def get_reading_by_date(date: str, db: Session = Depends(get_db)):
             "meter1_consumption": reading.meter1_consumption,
             "meter2_consumption": reading.meter2_consumption,
             "meter3_consumption": reading.meter3_consumption,
-            "timestamp": reading.timestamp
+            "timestamp": reading.timestamp.replace(tzinfo=timezone.utc).isoformat()
         }
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")

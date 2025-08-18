@@ -643,7 +643,10 @@ function Report() {
                   <strong>Total Consumed:</strong> {(selectedReading.meter1_consumption + selectedReading.meter2_consumption + selectedReading.meter3_consumption).toLocaleString()} units
                 </p>
                 <p style={{margin: '5px 0', fontSize: '14px', color: '#999'}}>
-                  Reading taken at: {new Date(selectedReading.timestamp).toLocaleTimeString()}
+                  Reading taken at: {new Date(selectedReading.timestamp).toLocaleTimeString('en-US', { 
+                    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    hour12: false 
+                  })}
                 </p>
               </div>
             </div>
