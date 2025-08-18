@@ -74,6 +74,7 @@ The project includes a comprehensive command-line interface for easy management:
 emt start      # Start application with status checks and URLs
 emt stop       # Stop application gracefully (creates automatic backup)
 emt restart    # Restart entire application
+emt rebuild    # Rebuild Docker images and restart
 emt status     # Show detailed status, resource usage, and URLs
 emt logs       # View application logs (live or historical)
 emt backup     # Create database backup on-demand
@@ -90,32 +91,6 @@ emt help       # Show comprehensive help information
 - **Restore Safety**: Confirmation prompts before database restoration
 - **Docker Integration**: Built-in health checks and status monitoring
 
-#### Quick Workflow Examples
-```bash
-# Start and monitor logs
-emt start && emt logs
-
-# Check if everything is running
-emt status
-
-# Stop with automatic backup
-emt stop
-
-# Create backup manually
-emt backup
-
-# Restore from backup if needed
-emt restore
-```
-
-### Legacy Docker Commands (if needed)
-```bash
-# Direct Docker Compose commands (use EMT commands instead)
-docker-compose up --build     # Use: emt start
-docker-compose down          # Use: emt stop
-docker-compose ps            # Use: emt status
-docker-compose logs          # Use: emt logs
-```
 
 ### Environment Configuration
 

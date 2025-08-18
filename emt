@@ -1,6 +1,6 @@
 #!/bin/bash
 # Electricity Meter Tracker - Global Command
-# Usage: emt [start|stop|status|logs|restart]
+# Usage: emt [start|stop|restart|rebuild|status|logs|backup|restore|help]
 
 # Project directory (auto-detect or update this path if you move the project)
 # Resolve symlink to get the actual script location
@@ -258,6 +258,36 @@ restart_emt() {
     start_emt
 }
 
+# Rebuild function
+rebuild_emt() {
+    print_status "Rebuilding Electricity Meter Tracker..."
+    check_docker
+    
+    # Check if containers are running and stop them first
+    if [ -n "$(docker-compose ps -q)" ]; then
+        print_status "Stopping running containers..."
+        docker-compose down
+    fi
+    
+    print_status "Building Docker images..."
+    if [ "$2" = "--no-cache" ]; then
+        print_status "Building with --no-cache flag (complete rebuild)..."
+        docker-compose build --no-cache
+    else
+        docker-compose build
+    fi
+    
+    if [ $? -eq 0 ]; then
+        print_success "Build completed successfully!"
+        echo ""
+        print_status "Starting containers with new build..."
+        start_emt
+    else
+        print_error "Build failed. Please check the error messages above."
+        exit 1
+    fi
+}
+
 # Help function
 show_help() {
     echo "Electricity Meter Tracker (EMT) - Global Command"
@@ -268,18 +298,12 @@ show_help() {
     echo "  start     Start the application"
     echo "  stop      Stop the application"
     echo "  restart   Restart the application"
+    echo "  rebuild   Rebuild Docker images and restart"
     echo "  status    Show application status"
     echo "  logs      View application logs"
     echo "  backup    Create database backup"
     echo "  restore   Restore database from backup"
     echo "  help      Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  emt start     # Start from any directory"
-    echo "  emt status    # Check if running"
-    echo "  emt logs      # View logs"
-    echo "  emt backup    # Create database backup"
-    echo "  emt restore   # Restore from backup"
     echo ""
     echo "Backup Information:"
     echo "  • Database backup is created on-demand with 'emt backup'"
@@ -300,6 +324,9 @@ case "$1" in
         ;;
     restart)
         restart_emt
+        ;;
+    rebuild)
+        rebuild_emt "$@"
         ;;
     status)
         status_emt
