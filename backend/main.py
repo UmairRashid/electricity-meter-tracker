@@ -505,6 +505,23 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
         "efficiency_score": efficiency_score
     }
 
+@app.delete("/readings/delete-old-data")
+async def delete_old_data(cutoff_date: str, db: Session = Depends(get_db)):
+    try:
+        # Parse cutoff date string to date object
+        parsed_cutoff_date = datetime.strptime(cutoff_date, "%Y-%m-%d").date()
+        
+        # Delete readings older than cutoff date
+        result = db.query(MeterReading).filter(MeterReading.reading_date < parsed_cutoff_date).delete()
+        db.commit()
+        
+        return {"message": f"Successfully deleted {result} old records", "deleted_count": result}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid cutoff_date format. Use YYYY-MM-DD")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error deleting old data: {str(e)}")
+
 @app.get("/readings/{date}")
 async def get_reading_by_date(date: str, db: Session = Depends(get_db)):
     try:
@@ -554,26 +571,6 @@ async def delete_reading_by_date(date: str, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting reading: {str(e)}")
 
-@app.delete("/readings/delete-old-data")
-async def delete_old_data(request: dict, db: Session = Depends(get_db)):
-    cutoff_date = request.get('cutoff_date')
-    if not cutoff_date:
-        raise HTTPException(status_code=400, detail="cutoff_date is required")
-    
-    try:
-        # Parse cutoff date string to date object
-        parsed_cutoff_date = datetime.strptime(cutoff_date, "%Y-%m-%d").date()
-        
-        # Delete readings older than cutoff date
-        result = db.query(MeterReading).filter(MeterReading.reading_date < parsed_cutoff_date).delete()
-        db.commit()
-        
-        return {"message": f"Successfully deleted {result} old records", "deleted_count": result}
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid cutoff_date format. Use YYYY-MM-DD")
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error deleting old data: {str(e)}")
 
 @app.get("/health")
 async def health_check(db: Session = Depends(get_db)):
