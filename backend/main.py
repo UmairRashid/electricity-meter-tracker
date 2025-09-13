@@ -250,9 +250,9 @@ async def get_readings(db: Session = Depends(get_db)):
             "meter1_current": reading.meter1_current,
             "meter2_current": reading.meter2_current,
             "meter3_current": reading.meter3_current,
-            "meter1_consumption": reading.meter1_consumption,
-            "meter2_consumption": reading.meter2_consumption,
-            "meter3_consumption": reading.meter3_consumption,
+            "meter1_consumption": reading.meter1_current - base_reading.meter1_base,
+            "meter2_consumption": reading.meter2_current - base_reading.meter2_base,
+            "meter3_consumption": reading.meter3_current - base_reading.meter3_base,
             "timestamp": reading.timestamp.replace(tzinfo=timezone.utc).isoformat()
         }
         for reading in readings
@@ -315,9 +315,9 @@ async def get_consumption_summary(db: Session = Depends(get_db)):
         "base_date": base_reading.base_date.strftime("%Y-%m-%d"),
         "latest_date": latest_reading.reading_date.strftime("%Y-%m-%d"),
         "total_consumption": {
-            "meter1": latest_reading.meter1_consumption,
-            "meter2": latest_reading.meter2_consumption,
-            "meter3": latest_reading.meter3_consumption
+            "meter1": latest_reading.meter1_current - base_reading.meter1_base,
+            "meter2": latest_reading.meter2_current - base_reading.meter2_base,
+            "meter3": latest_reading.meter3_current - base_reading.meter3_base
         }
     }
 
@@ -371,10 +371,11 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
         ).order_by(MeterReading.reading_date.desc()).first()
         
         if base_reading_for_month:
+            # Calculate consumption dynamically using current base readings
             base_consumption = {
-                "meter1": base_reading_for_month.meter1_consumption,
-                "meter2": base_reading_for_month.meter2_consumption,
-                "meter3": base_reading_for_month.meter3_consumption
+                "meter1": base_reading_for_month.meter1_current - base_reading.meter1_base,
+                "meter2": base_reading_for_month.meter2_current - base_reading.meter2_base,
+                "meter3": base_reading_for_month.meter3_current - base_reading.meter3_base
             }
     
     if not readings:
@@ -388,10 +389,17 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
     latest_reading = readings[-1]
     
     # Calculate monthly consumption (subtract base consumption for the month)
+    # Use dynamic calculation instead of stored consumption values
+    latest_actual_consumption = {
+        "meter1": latest_reading.meter1_current - base_reading.meter1_base,
+        "meter2": latest_reading.meter2_current - base_reading.meter2_base,
+        "meter3": latest_reading.meter3_current - base_reading.meter3_base
+    }
+    
     monthly_consumed = {
-        "meter1": latest_reading.meter1_consumption - base_consumption["meter1"],
-        "meter2": latest_reading.meter2_consumption - base_consumption["meter2"],
-        "meter3": latest_reading.meter3_consumption - base_consumption["meter3"]
+        "meter1": latest_actual_consumption["meter1"] - base_consumption["meter1"],
+        "meter2": latest_actual_consumption["meter2"] - base_consumption["meter2"],
+        "meter3": latest_actual_consumption["meter3"] - base_consumption["meter3"]
     }
     monthly_consumed["total"] = monthly_consumed["meter1"] + monthly_consumed["meter2"] + monthly_consumed["meter3"]
     
@@ -400,20 +408,23 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
     prev_consumption = base_consumption
     
     for reading in readings:
+        # Calculate actual consumption dynamically
+        actual_consumption = {
+            "meter1": reading.meter1_current - base_reading.meter1_base,
+            "meter2": reading.meter2_current - base_reading.meter2_base,
+            "meter3": reading.meter3_current - base_reading.meter3_base
+        }
+        
         daily_consumption = {
             "date": reading.reading_date.strftime("%Y-%m-%d"),
-            "meter1": reading.meter1_consumption - prev_consumption["meter1"],
-            "meter2": reading.meter2_consumption - prev_consumption["meter2"],
-            "meter3": reading.meter3_consumption - prev_consumption["meter3"]
+            "meter1": actual_consumption["meter1"] - prev_consumption["meter1"],
+            "meter2": actual_consumption["meter2"] - prev_consumption["meter2"],
+            "meter3": actual_consumption["meter3"] - prev_consumption["meter3"]
         }
         daily_consumption["total"] = daily_consumption["meter1"] + daily_consumption["meter2"] + daily_consumption["meter3"]
         daily_usage.append(daily_consumption)
         
-        prev_consumption = {
-            "meter1": reading.meter1_consumption,
-            "meter2": reading.meter2_consumption,
-            "meter3": reading.meter3_consumption
-        }
+        prev_consumption = actual_consumption
     
     # Calculate days in current monthly cycle (same date to same date)
     days_elapsed_in_month = (current_date - current_month_start).days + 1
@@ -534,14 +545,17 @@ async def get_reading_by_date(date: str, db: Session = Depends(get_db)):
         if not reading:
             raise HTTPException(status_code=404, detail=f"No reading found for date {date}")
         
+        # Get base reading for dynamic consumption calculation
+        base_reading = db.query(BaseReading).order_by(BaseReading.created_at.desc()).first()
+        
         return {
             "reading_date": reading.reading_date.strftime("%Y-%m-%d"),
             "meter1_current": reading.meter1_current,
             "meter2_current": reading.meter2_current,
             "meter3_current": reading.meter3_current,
-            "meter1_consumption": reading.meter1_consumption,
-            "meter2_consumption": reading.meter2_consumption,
-            "meter3_consumption": reading.meter3_consumption,
+            "meter1_consumption": reading.meter1_current - base_reading.meter1_base if base_reading else 0,
+            "meter2_consumption": reading.meter2_current - base_reading.meter2_base if base_reading else 0,
+            "meter3_consumption": reading.meter3_current - base_reading.meter3_base if base_reading else 0,
             "timestamp": reading.timestamp.replace(tzinfo=timezone.utc).isoformat()
         }
     except ValueError:
