@@ -6,8 +6,6 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Date
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime, timedelta, date, timezone
-from dateutil.relativedelta import relativedelta
-import calendar
 from typing import List, Optional
 import os
 from dotenv import load_dotenv
@@ -83,6 +81,7 @@ class BaseReading(Base):
     meter2_base = Column(Integer)
     meter3_base = Column(Integer)
     base_date = Column(Date, index=True)
+    end_date = Column(Date, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class MeterReading(Base):
@@ -106,6 +105,10 @@ class BaseReadingCreate(BaseModel):
     meter2_base: int
     meter3_base: int
     base_date: str
+    end_date: str = None  # Make end_date optional
+
+class EndDateUpdate(BaseModel):
+    end_date: str
 
 class ReadingCreate(BaseModel):
     meter1_current: int
@@ -118,6 +121,7 @@ class BaseReadingResponse(BaseModel):
     meter2_base: int
     meter3_base: int
     base_date: str
+    end_date: str
     created_at: datetime
 
 class ReadingResponse(BaseModel):
@@ -140,15 +144,29 @@ def get_db():
 @app.post("/base-readings")
 async def set_base_readings(base_readings: BaseReadingCreate, db: Session = Depends(get_db)):
     try:
-        # Parse date string to date object
-        parsed_date = datetime.strptime(base_readings.base_date, "%Y-%m-%d").date()
+        # Parse base date
+        parsed_base_date = datetime.strptime(base_readings.base_date, "%Y-%m-%d").date()
+        
+        # Handle end_date - use provided value or default to next month
+        if base_readings.end_date:
+            parsed_end_date = datetime.strptime(base_readings.end_date, "%Y-%m-%d").date()
+            # Validate that end_date is not older than base_date
+            if parsed_end_date < parsed_base_date:
+                raise HTTPException(status_code=400, detail="End date cannot be older than base date")
+        else:
+            # Default end_date to one month after base_date
+            if parsed_base_date.month == 12:
+                parsed_end_date = parsed_base_date.replace(year=parsed_base_date.year + 1, month=1)
+            else:
+                parsed_end_date = parsed_base_date.replace(month=parsed_base_date.month + 1)
         
         # Create new base reading
         db_base = BaseReading(
             meter1_base=base_readings.meter1_base,
             meter2_base=base_readings.meter2_base,
             meter3_base=base_readings.meter3_base,
-            base_date=parsed_date
+            base_date=parsed_base_date,
+            end_date=parsed_end_date
         )
         db.add(db_base)
         db.commit()
@@ -158,6 +176,33 @@ async def set_base_readings(base_readings: BaseReadingCreate, db: Session = Depe
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error setting base readings: {str(e)}")
+
+@app.patch("/base-readings/end-date")
+async def update_end_date(end_date_update: EndDateUpdate, db: Session = Depends(get_db)):
+    try:
+        # Get the latest base reading
+        latest_base_reading = db.query(BaseReading).order_by(BaseReading.created_at.desc()).first()
+        
+        if not latest_base_reading:
+            raise HTTPException(status_code=404, detail="No base readings found to update")
+        
+        # Parse and validate the new end date
+        parsed_end_date = datetime.strptime(end_date_update.end_date, "%Y-%m-%d").date()
+        
+        # Validate that end_date is not older than base_date
+        if parsed_end_date < latest_base_reading.base_date:
+            raise HTTPException(status_code=400, detail="End date cannot be older than base date")
+        
+        # Update the end date
+        latest_base_reading.end_date = parsed_end_date
+        db.commit()
+        
+        return {"message": "End date updated successfully"}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error updating end date: {str(e)}")
 
 @app.post("/readings")
 async def submit_readings(readings: ReadingCreate, db: Session = Depends(get_db)):
@@ -224,7 +269,8 @@ async def get_latest_base_readings(db: Session = Depends(get_db)):
             "meter1_base": latest.meter1_base,
             "meter2_base": latest.meter2_base,
             "meter3_base": latest.meter3_base,
-            "base_date": latest.base_date.strftime("%Y-%m-%d")
+            "base_date": latest.base_date.strftime("%Y-%m-%d"),
+            "end_date": latest.end_date.strftime("%Y-%m-%d")
         }
     else:
         return None
@@ -333,79 +379,53 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
     if not base_reading:
         return {"error": "No base readings found"}
     
-    # Use base_date as the start of the monthly cycle
+    # Use base_date and end_date from base reading
     base_date = base_reading.base_date
+    end_date = base_reading.end_date
     current_date = datetime.now().date()
     
-    # Calculate current monthly cycle (same date to same date)
-    current_month_cycle = 0
-    temp_date = base_date
+    # Calculate total days in the custom period (inclusive of both dates)
+    total_days_in_period = (end_date - base_date).days + 1
     
-    # Find which monthly cycle we're currently in
-    while temp_date <= current_date:
-        next_month_start = temp_date + relativedelta(months=1)
-        if current_date < next_month_start:
-            break
-        current_month_cycle += 1
-        temp_date = next_month_start
+    # Calculate days elapsed and remaining
+    if current_date > end_date:
+        days_elapsed = total_days_in_period
+        days_remaining = 0
+    elif current_date < base_date:
+        days_elapsed = 0
+        days_remaining = total_days_in_period
+    else:
+        days_elapsed = (current_date - base_date).days + 1
+        days_remaining = max(0, total_days_in_period - days_elapsed)
     
-    # Calculate current month boundaries (same date to same date)
-    current_month_start = base_date + relativedelta(months=current_month_cycle)
-    current_month_end = current_month_start + relativedelta(months=1)
-    
-    # Calculate actual days in current monthly cycle (from start date to end date, inclusive of end date)
-    days_in_current_month = (current_month_end - current_month_start).days + 1
-    
-    # Get readings for current month cycle only (from start date up to but not including end date)
+    # Get readings for the custom period (from base_date to current_date or end_date, whichever is earlier)
+    period_end_date = min(current_date, end_date)
     readings = db.query(MeterReading).filter(
-        MeterReading.reading_date >= current_month_start,
-        MeterReading.reading_date < min(current_date + timedelta(days=1), current_month_end)
+        MeterReading.reading_date >= base_date,
+        MeterReading.reading_date <= period_end_date
     ).order_by(MeterReading.reading_date.asc()).all()
-    
-    # Get base consumption for current month (consumption at start of current month)
-    base_consumption = {"meter1": 0, "meter2": 0, "meter3": 0}
-    if current_month_cycle > 0:
-        # Get the last reading before current month started
-        base_reading_for_month = db.query(MeterReading).filter(
-            MeterReading.reading_date < current_month_start
-        ).order_by(MeterReading.reading_date.desc()).first()
-        
-        if base_reading_for_month:
-            # Calculate consumption dynamically using current base readings
-            base_consumption = {
-                "meter1": base_reading_for_month.meter1_current - base_reading.meter1_base,
-                "meter2": base_reading_for_month.meter2_current - base_reading.meter2_base,
-                "meter3": base_reading_for_month.meter3_current - base_reading.meter3_base
-            }
     
     if not readings:
         return {
-            "error": "No readings found for current month cycle",
-            "current_month_start": current_month_start.strftime("%Y-%m-%d"),
-            "current_month_end": current_month_end.strftime("%Y-%m-%d"),
-            "month_cycle": current_month_cycle + 1
+            "error": "No readings found for custom period",
+            "period_start": base_date.strftime("%Y-%m-%d"),
+            "period_end": end_date.strftime("%Y-%m-%d"),
+            "current_date": current_date.strftime("%Y-%m-%d")
         }
     
     latest_reading = readings[-1]
     
-    # Calculate monthly consumption (subtract base consumption for the month)
-    # Use dynamic calculation instead of stored consumption values
-    latest_actual_consumption = {
+    # Calculate total consumption from base readings
+    total_consumed = {
         "meter1": latest_reading.meter1_current - base_reading.meter1_base,
         "meter2": latest_reading.meter2_current - base_reading.meter2_base,
         "meter3": latest_reading.meter3_current - base_reading.meter3_base
     }
+    total_consumed["total"] = total_consumed["meter1"] + total_consumed["meter2"] + total_consumed["meter3"]
     
-    monthly_consumed = {
-        "meter1": latest_actual_consumption["meter1"] - base_consumption["meter1"],
-        "meter2": latest_actual_consumption["meter2"] - base_consumption["meter2"],
-        "meter3": latest_actual_consumption["meter3"] - base_consumption["meter3"]
-    }
-    monthly_consumed["total"] = monthly_consumed["meter1"] + monthly_consumed["meter2"] + monthly_consumed["meter3"]
-    
-    # Calculate daily usage within current month
+    # Calculate daily usage within the period
     daily_usage = []
-    prev_consumption = base_consumption
+    prev_consumption = {"meter1": 0, "meter2": 0, "meter3": 0}
     
     for reading in readings:
         # Calculate actual consumption dynamically
@@ -426,90 +446,84 @@ async def get_usage_metrics(db: Session = Depends(get_db)):
         
         prev_consumption = actual_consumption
     
-    # Calculate days in current monthly cycle (same date to same date)
-    days_elapsed_in_month = (current_date - current_month_start).days + 1
-    days_remaining_in_month = max(0, days_in_current_month - days_elapsed_in_month)
-    
-    # Remaining units in current month
+    # Remaining units in custom period
     remaining = {
-        "meter1": MONTHLY_LIMIT_PER_METER - monthly_consumed["meter1"],
-        "meter2": MONTHLY_LIMIT_PER_METER - monthly_consumed["meter2"],
-        "meter3": MONTHLY_LIMIT_PER_METER - monthly_consumed["meter3"],
-        "total": TOTAL_MONTHLY_LIMIT - monthly_consumed["total"]
+        "meter1": MONTHLY_LIMIT_PER_METER - total_consumed["meter1"],
+        "meter2": MONTHLY_LIMIT_PER_METER - total_consumed["meter2"],
+        "meter3": MONTHLY_LIMIT_PER_METER - total_consumed["meter3"],
+        "total": TOTAL_MONTHLY_LIMIT - total_consumed["total"]
     }
     
-    # Daily averages for current month
+    # Daily averages
     daily_avg_used = {
-        "meter1": round(monthly_consumed["meter1"] / days_elapsed_in_month, 2),
-        "meter2": round(monthly_consumed["meter2"] / days_elapsed_in_month, 2),
-        "meter3": round(monthly_consumed["meter3"] / days_elapsed_in_month, 2),
-        "total": round(monthly_consumed["total"] / days_elapsed_in_month, 2)
+        "meter1": round(total_consumed["meter1"] / days_elapsed, 2) if days_elapsed > 0 else 0,
+        "meter2": round(total_consumed["meter2"] / days_elapsed, 2) if days_elapsed > 0 else 0,
+        "meter3": round(total_consumed["meter3"] / days_elapsed, 2) if days_elapsed > 0 else 0,
+        "total": round(total_consumed["total"] / days_elapsed, 2) if days_elapsed > 0 else 0
     }
     
-    # Daily average remaining for current month
+    # Daily average remaining
     daily_avg_remaining = {
-        "meter1": round(remaining["meter1"] / days_remaining_in_month, 2) if days_remaining_in_month > 0 else 0,
-        "meter2": round(remaining["meter2"] / days_remaining_in_month, 2) if days_remaining_in_month > 0 else 0,
-        "meter3": round(remaining["meter3"] / days_remaining_in_month, 2) if days_remaining_in_month > 0 else 0,
-        "total": round(remaining["total"] / days_remaining_in_month, 2) if days_remaining_in_month > 0 else 0
+        "meter1": round(remaining["meter1"] / days_remaining, 2) if days_remaining > 0 else 0,
+        "meter2": round(remaining["meter2"] / days_remaining, 2) if days_remaining > 0 else 0,
+        "meter3": round(remaining["meter3"] / days_remaining, 2) if days_remaining > 0 else 0,
+        "total": round(remaining["total"] / days_remaining, 2) if days_remaining > 0 else 0
     }
     
-    # Usage percentage for current month
+    # Usage percentage
     usage_percentage = {
-        "meter1": round((monthly_consumed["meter1"] / MONTHLY_LIMIT_PER_METER) * 100, 1),
-        "meter2": round((monthly_consumed["meter2"] / MONTHLY_LIMIT_PER_METER) * 100, 1),
-        "meter3": round((monthly_consumed["meter3"] / MONTHLY_LIMIT_PER_METER) * 100, 1),
-        "total": round((monthly_consumed["total"] / TOTAL_MONTHLY_LIMIT) * 100, 1)
+        "meter1": round((total_consumed["meter1"] / MONTHLY_LIMIT_PER_METER) * 100, 1),
+        "meter2": round((total_consumed["meter2"] / MONTHLY_LIMIT_PER_METER) * 100, 1),
+        "meter3": round((total_consumed["meter3"] / MONTHLY_LIMIT_PER_METER) * 100, 1),
+        "total": round((total_consumed["total"] / TOTAL_MONTHLY_LIMIT) * 100, 1)
     }
     
-    # Monthly projection for current calendar month
-    monthly_projection = {
-        "meter1": round(daily_avg_used["meter1"] * days_in_current_month, 1),
-        "meter2": round(daily_avg_used["meter2"] * days_in_current_month, 1),
-        "meter3": round(daily_avg_used["meter3"] * days_in_current_month, 1),
-        "total": round(daily_avg_used["total"] * days_in_current_month, 1)
+    # Period projection (what consumption would be if we continue at current rate)
+    period_projection = {
+        "meter1": round(daily_avg_used["meter1"] * total_days_in_period, 1),
+        "meter2": round(daily_avg_used["meter2"] * total_days_in_period, 1),
+        "meter3": round(daily_avg_used["meter3"] * total_days_in_period, 1),
+        "total": round(daily_avg_used["total"] * total_days_in_period, 1)
     }
     
-    # Days until limit reached in current month
+    # Days until limit reached
     days_until_limit = {}
     for meter in ["meter1", "meter2", "meter3", "total"]:
         if daily_avg_used[meter] > 0:
             limit = MONTHLY_LIMIT_PER_METER if meter != "total" else TOTAL_MONTHLY_LIMIT
-            days_until_limit[meter] = max(0, round((limit - monthly_consumed[meter]) / daily_avg_used[meter], 1))
+            days_until_limit[meter] = max(0, round((limit - total_consumed[meter]) / daily_avg_used[meter], 1))
         else:
             days_until_limit[meter] = 999999
     
-    # Peak usage day in current month
+    # Peak usage day
     peak_day = max(daily_usage, key=lambda x: x["total"]) if daily_usage else None
     
-    # Efficiency score (how well you're pacing for the month)
+    # Efficiency score (how well you're pacing for the period)
     efficiency_score = {}
-    month_progress_percentage = (days_elapsed_in_month / days_in_current_month) * 100
+    time_progress_percentage = (days_elapsed / total_days_in_period) * 100 if total_days_in_period > 0 else 0
     for meter in ["meter1", "meter2", "meter3", "total"]:
-        efficiency_score[meter] = round(100 - (usage_percentage[meter] - month_progress_percentage), 1)
+        efficiency_score[meter] = round(100 - (usage_percentage[meter] - time_progress_percentage), 1)
     
     return {
         "limits": {
             "per_meter": MONTHLY_LIMIT_PER_METER,
             "total": TOTAL_MONTHLY_LIMIT,
-            "days_in_month": days_in_current_month
+            "days_in_period": total_days_in_period
         },
         "tracking_period": {
             "base_date": base_date.strftime("%Y-%m-%d"),
-            "current_month_start": current_month_start.strftime("%Y-%m-%d"),
-            "current_month_end": (current_month_end - timedelta(days=1)).strftime("%Y-%m-%d"),
+            "end_date": end_date.strftime("%Y-%m-%d"),
             "current_date": current_date.strftime("%Y-%m-%d"),
-            "month_cycle": current_month_cycle + 1,
-            "days_elapsed": days_elapsed_in_month,
-            "days_remaining": days_remaining_in_month,
-            "cycle_description": f"{current_month_start.strftime('%B %d')} - {(current_month_end - timedelta(days=1)).strftime('%B %d, %Y')}"
+            "days_elapsed": days_elapsed,
+            "days_remaining": days_remaining,
+            "period_description": f"{base_date.strftime('%B %d, %Y')} - {end_date.strftime('%B %d, %Y')}"
         },
-        "total_consumed": monthly_consumed,
+        "total_consumed": total_consumed,
         "remaining": remaining,
         "daily_avg_used": daily_avg_used,
         "daily_avg_remaining": daily_avg_remaining,
         "usage_percentage": usage_percentage,
-        "monthly_projection": monthly_projection,
+        "period_projection": period_projection,
         "days_until_limit": days_until_limit,
         "peak_usage_day": peak_day,
         "daily_usage": daily_usage,

@@ -356,7 +356,7 @@ function Report() {
       {usageMetrics && !usageError && (
         <div className="filter-container">
           <h3>Usage Dashboard</h3>
-          <p><strong>Base Date:</strong> {usageMetrics.tracking_period?.base_date || 'N/A'} | <strong>Current Date:</strong> {usageMetrics.tracking_period?.current_date || 'N/A'}</p>
+          <p><strong>Tracking Period:</strong> {usageMetrics.tracking_period?.base_date || 'N/A'} to {usageMetrics.tracking_period?.end_date || 'N/A'} | <strong>Current Date:</strong> {usageMetrics.tracking_period?.current_date || 'N/A'}</p>
           
           {/* Summary Cards */}
           <div className="desktop-grid-6 tablet-grid-3 mobile-grid-2" style={{marginTop: '20px'}}>

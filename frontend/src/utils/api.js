@@ -52,6 +52,11 @@ export const setBaseReadings = (baseReadings) => apiCall('/base-readings', {
   body: baseReadings,
 })
 
+export const updateEndDate = (endDate) => apiCall('/base-readings/end-date', {
+  method: 'PATCH',
+  body: { end_date: endDate },
+})
+
 export const deleteOldData = (cutoffDate) => apiCall(`/readings/delete-old-data?cutoff_date=${cutoffDate}`, {
   method: 'DELETE',
 })

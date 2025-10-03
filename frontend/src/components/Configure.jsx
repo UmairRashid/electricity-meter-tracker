@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { fetchBaseReadings, setBaseReadings as submitBaseReadings, deleteOldData, deleteReadingByDate, fetchReadingDates } from '../utils/api'
+import { fetchBaseReadings, setBaseReadings as submitBaseReadings, updateEndDate, deleteOldData, deleteReadingByDate, fetchReadingDates } from '../utils/api'
 import { useApiMutation } from '../hooks/useApi'
 import { validateBaseReadings } from '../utils/validation'
 import LoadingSpinner from './common/LoadingSpinner'
@@ -12,23 +12,36 @@ function Configure() {
     base_date: ''
   })
   const [currentBaseReadings, setCurrentBaseReadings] = useState(null)
+  const [endDate, setEndDate] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('')
+  const [endDateMessage, setEndDateMessage] = useState('')
+  const [endDateMessageType, setEndDateMessageType] = useState('')
   const [deleteDate, setDeleteDate] = useState('')
   const [availableDates, setAvailableDates] = useState([])
 
   useEffect(() => {
     const loadInitialData = async () => {
       setIsLoading(true)
-      await Promise.all([
+      const [baseReadingsData] = await Promise.all([
         fetchCurrentBaseReadings(),
         fetchAvailableDates()
       ])
-      setBaseReadings(prev => ({
-        ...prev,
-        base_date: new Date().toISOString().split('T')[0]
-      }))
+      
+      // If no existing base readings, set form defaults to current date
+      if (!baseReadingsData) {
+        const today = new Date().toISOString().split('T')[0]
+        const nextMonth = new Date()
+        nextMonth.setMonth(nextMonth.getMonth() + 1)
+        const endDateDefault = nextMonth.toISOString().split('T')[0]
+        
+        setBaseReadings(prev => ({
+          ...prev,
+          base_date: today
+        }))
+        setEndDate(endDateDefault)
+      }
       setIsLoading(false)
     }
     loadInitialData()
@@ -39,9 +52,18 @@ function Configure() {
       const data = await fetchBaseReadings()
       if (data) {
         setCurrentBaseReadings(data)
+        // Pre-populate base readings form (without end_date)
+        setBaseReadings(prev => ({
+          ...prev,
+          base_date: data.base_date
+        }))
+        // Set end date separately
+        setEndDate(data.end_date)
       }
+      return data
     } catch (error) {
       console.error('Error fetching current base readings:', error)
+      return null
     }
   }
 
@@ -65,6 +87,7 @@ function Configure() {
   }
 
   const { mutate: submitBaseMutation, loading: isSubmitting } = useApiMutation()
+  const { mutate: updateEndDateMutation, loading: isUpdatingEndDate } = useApiMutation()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -88,20 +111,14 @@ function Configure() {
       setMessage('Base readings configured successfully!')
       setMessageType('success')
       
-      // Update the current base readings state immediately with the new data
-      setCurrentBaseReadings({
-        meter1_base: validation.values.meter1,
-        meter2_base: validation.values.meter2,
-        meter3_base: validation.values.meter3,
-        base_date: baseReadings.base_date
-      })
-      
       // Clear the form after successful submission
+      const today = new Date().toISOString().split('T')[0]
+      
       setBaseReadings({
         meter1_base: '',
         meter2_base: '',
         meter3_base: '',
-        base_date: new Date().toISOString().split('T')[0]
+        base_date: today
       })
       
       // Also fetch from server to ensure consistency
@@ -111,6 +128,40 @@ function Configure() {
     } catch (error) {
       setMessage(error.message || 'Error setting base readings. Please try again.')
       setMessageType('error')
+    }
+  }
+
+  const handleEndDateUpdate = async (e) => {
+    e.preventDefault()
+    setEndDateMessage('')
+
+    try {
+      if (!currentBaseReadings) {
+        throw new Error('No base readings found. Please set base readings first.')
+      }
+
+      // Validate that end_date is not older than base_date
+      if (endDate < currentBaseReadings.base_date) {
+        throw new Error('End date cannot be older than base date')
+      }
+
+      await updateEndDateMutation(updateEndDate, endDate)
+      setEndDateMessage('End date updated successfully! Metrics will be recalculated.')
+      setEndDateMessageType('success')
+      
+      // Update the current base readings state
+      setCurrentBaseReadings(prev => ({
+        ...prev,
+        end_date: endDate
+      }))
+      
+      // Also fetch from server to ensure consistency
+      setTimeout(() => {
+        fetchCurrentBaseReadings()
+      }, 500)
+    } catch (error) {
+      setEndDateMessage(error.message || 'Error updating end date. Please try again.')
+      setEndDateMessageType('error')
     }
   }
 
@@ -201,7 +252,7 @@ function Configure() {
         }}>
           <h4 style={{margin: '0 0 10px 0', color: '#1976d2'}}>Current Base Configuration</h4>
           <p style={{margin: '5px 0'}}>
-            <strong>Base Date:</strong> {currentBaseReadings.base_date}
+            <strong>Period:</strong> {currentBaseReadings.base_date} to {currentBaseReadings.end_date}
           </p>
           <p style={{margin: '5px 0'}}>
             <strong>Meter 1:</strong> {currentBaseReadings.meter1_base} units | 
@@ -273,6 +324,82 @@ function Configure() {
           {isSubmitting ? 'Setting...' : 'Set Base Readings'}
         </button>
       </form>
+
+      {/* End Date Update Panel */}
+      {currentBaseReadings && (
+        <div style={{marginTop: '30px', paddingTop: '20px', borderTop: '2px solid #eee'}}>
+          <h3 style={{color: '#17a2b8', marginBottom: '15px'}}>Update Tracking Period</h3>
+          
+          {endDateMessage && (
+            <div className={`${endDateMessageType}-message`} style={{marginBottom: '15px'}}>
+              {endDateMessage}
+            </div>
+          )}
+
+          <div style={{padding: '20px', background: '#e3f2fd', borderRadius: '8px', border: '1px solid #2196f3', marginBottom: '20px'}}>
+            <h4 style={{color: '#1976d2', marginBottom: '10px'}}>Current Period</h4>
+            <p style={{margin: '5px 0', color: '#333'}}>
+              <strong>Base Date:</strong> {currentBaseReadings.base_date} | <strong>End Date:</strong> {currentBaseReadings.end_date}
+            </p>
+            <p style={{margin: '5px 0', color: '#333'}}>
+              <strong>Total Days:</strong> {(() => {
+                const baseDate = new Date(currentBaseReadings.base_date)
+                const endDate = new Date(currentBaseReadings.end_date)
+                const diffTime = Math.abs(endDate - baseDate)
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1 // +1 to include both dates
+                return diffDays
+              })()} days
+            </p>
+            <p style={{margin: '5px 0', fontSize: '14px', color: '#666'}}>
+              Change the end date to extend or modify your tracking period. All usage metrics will be recalculated automatically.
+            </p>
+          </div>
+
+          <form onSubmit={handleEndDateUpdate} style={{marginBottom: '20px'}}>
+            <div style={{display: 'flex', alignItems: 'center', gap: '15px', flexWrap: 'wrap'}}>
+              <div>
+                <label htmlFor="end_date_update" style={{display: 'block', marginBottom: '5px', fontWeight: '500'}}>
+                  New End Date:
+                </label>
+                <input
+                  type="date"
+                  id="end_date_update"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  min={currentBaseReadings?.base_date}
+                  required
+                  style={{
+                    padding: '10px',
+                    border: '1px solid #ced4da',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+              <div>
+                <button 
+                  type="submit" 
+                  disabled={isUpdatingEndDate || !endDate}
+                  style={{
+                    background: '#17a2b8', 
+                    color: 'white', 
+                    padding: '10px 20px', 
+                    border: 'none', 
+                    borderRadius: '4px', 
+                    cursor: (isUpdatingEndDate || !endDate) ? 'not-allowed' : 'pointer',
+                    opacity: (isUpdatingEndDate || !endDate) ? 0.6 : 1,
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    marginTop: '20px'
+                  }}
+                >
+                  {isUpdatingEndDate ? 'Updating...' : 'Recalculate'}
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
 
       {currentBaseReadings && (
         <div style={{marginTop: '30px', paddingTop: '20px', borderTop: '2px solid #eee'}}>

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS base_readings (
     meter2_base INTEGER NOT NULL,
     meter3_base INTEGER NOT NULL,
     base_date DATE NOT NULL,
+    end_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
