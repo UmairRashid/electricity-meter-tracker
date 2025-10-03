@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { fetchBaseReadings, setBaseReadings as submitBaseReadings, updateEndDate, deleteOldData, deleteReadingByDate, fetchReadingDates } from '../utils/api'
+import { fetchBaseReadings, setBaseReadings as submitBaseReadings, updateEndDate, deleteOldData, deleteReadingByDate, fetchReadingDates, analyzeDataGaps, fillDataGaps } from '../utils/api'
 import { useApiMutation } from '../hooks/useApi'
 import { validateBaseReadings } from '../utils/validation'
 import LoadingSpinner from './common/LoadingSpinner'
@@ -20,6 +20,12 @@ function Configure() {
   const [endDateMessageType, setEndDateMessageType] = useState('')
   const [deleteDate, setDeleteDate] = useState('')
   const [availableDates, setAvailableDates] = useState([])
+  
+  // Gap filling state
+  const [gapAnalysis, setGapAnalysis] = useState(null)
+  const [gapMessage, setGapMessage] = useState('')
+  const [gapMessageType, setGapMessageType] = useState('')
+  const [showGapResults, setShowGapResults] = useState(false)
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -88,6 +94,8 @@ function Configure() {
 
   const { mutate: submitBaseMutation, loading: isSubmitting } = useApiMutation()
   const { mutate: updateEndDateMutation, loading: isUpdatingEndDate } = useApiMutation()
+  const { mutate: analyzeMutation, loading: isAnalyzing } = useApiMutation()
+  const { mutate: fillMutation, loading: isFilling } = useApiMutation()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -219,6 +227,67 @@ function Configure() {
         setMessage('Error deleting reading. Please try again.')
         setMessageType('error')
       }
+    }
+  }
+
+  const handleAnalyzeGaps = async () => {
+    setGapMessage('')
+    setGapAnalysis(null)
+    setShowGapResults(false)
+
+    try {
+      if (!currentBaseReadings) {
+        throw new Error('No base readings found. Please set base readings first.')
+      }
+
+      const analysis = await analyzeMutation(analyzeDataGaps)
+      setGapAnalysis(analysis)
+      setShowGapResults(true)
+      
+      if (analysis.gaps_found === 0) {
+        setGapMessage('✅ No data gaps detected! Your readings are complete.')
+        setGapMessageType('success')
+      } else {
+        setGapMessage(`Found ${analysis.gaps_found} data gap${analysis.gaps_found > 1 ? 's' : ''} with ${analysis.total_missing_days} missing day${analysis.total_missing_days > 1 ? 's' : ''}.`)
+        setGapMessageType('info')
+      }
+    } catch (error) {
+      setGapMessage(error.message || 'Error analyzing data gaps. Please try again.')
+      setGapMessageType('error')
+      setShowGapResults(false)
+    }
+  }
+
+  const handleFillGaps = async () => {
+    if (!gapAnalysis || gapAnalysis.gaps_found === 0) {
+      setGapMessage('No gaps to fill.')
+      setGapMessageType('error')
+      return
+    }
+
+    if (!confirm(`Are you sure you want to fill ${gapAnalysis.total_missing_days} missing days with interpolated readings? This action cannot be undone.`)) {
+      return
+    }
+
+    setGapMessage('')
+
+    try {
+      const result = await fillMutation(fillDataGaps)
+      
+      if (result.success) {
+        setGapMessage(`✅ Successfully filled ${result.filled_days} missing days with interpolated readings!`)
+        setGapMessageType('success')
+        setGapAnalysis(null)
+        setShowGapResults(false)
+        
+        // Refresh available dates after filling gaps
+        await fetchAvailableDates()
+      } else {
+        throw new Error(result.message || 'Failed to fill gaps')
+      }
+    } catch (error) {
+      setGapMessage(error.message || 'Error filling data gaps. Please try again.')
+      setGapMessageType('error')
     }
   }
 
@@ -398,6 +467,174 @@ function Configure() {
               </div>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Fill Missing Days Panel */}
+      {currentBaseReadings && (
+        <div style={{marginTop: '30px', paddingTop: '20px', borderTop: '2px solid #eee'}}>
+          <h3 style={{color: '#ff9800', marginBottom: '15px'}}>Fill Missing Days</h3>
+          
+          {gapMessage && (
+            <div className={`${gapMessageType}-message`} style={{marginBottom: '15px'}}>
+              {gapMessage}
+            </div>
+          )}
+
+          <div style={{
+            padding: '20px', 
+            background: '#fff3e0', 
+            borderRadius: '8px', 
+            border: '1px solid #ff9800', 
+            marginBottom: '20px'
+          }}>
+            <p style={{margin: '0 0 15px 0', color: '#333', lineHeight: '1.5'}}>
+              Detect and fill gaps in your daily meter readings by distributing consumption equally across missing days.
+            </p>
+            
+            {!showGapResults ? (
+              <div>
+                <button 
+                  onClick={handleAnalyzeGaps}
+                  disabled={isAnalyzing}
+                  style={{
+                    background: '#ff9800', 
+                    color: 'white', 
+                    padding: '12px 24px', 
+                    border: 'none', 
+                    borderRadius: '4px', 
+                    cursor: isAnalyzing ? 'not-allowed' : 'pointer',
+                    opacity: isAnalyzing ? 0.6 : 1,
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  {isAnalyzing ? 'Analyzing...' : '🔍 Analyze Data Gaps'}
+                </button>
+              </div>
+            ) : (
+              <div>
+                {gapAnalysis && gapAnalysis.gaps_found > 0 && (
+                  <div>
+                    <h4 style={{color: '#e65100', marginBottom: '15px'}}>📊 Gap Analysis Results:</h4>
+                    <div style={{
+                      background: 'white', 
+                      border: '1px solid #ffcc02', 
+                      borderRadius: '6px', 
+                      padding: '15px',
+                      marginBottom: '20px',
+                      maxHeight: '300px',
+                      overflowY: 'auto'
+                    }}>
+                      {gapAnalysis.gaps.map((gap, index) => (
+                        <div key={index} style={{
+                          marginBottom: index < gapAnalysis.gaps.length - 1 ? '15px' : '0',
+                          paddingBottom: index < gapAnalysis.gaps.length - 1 ? '15px' : '0',
+                          borderBottom: index < gapAnalysis.gaps.length - 1 ? '1px solid #f0f0f0' : 'none'
+                        }}>
+                          <p style={{margin: '0 0 8px 0', fontWeight: 'bold', color: '#d84315'}}>
+                            Gap {index + 1}: {gap.gap_start} → {gap.gap_end} ({gap.missing_dates.length} missing day{gap.missing_dates.length > 1 ? 's' : ''})
+                          </p>
+                          <p style={{margin: '0 0 5px 0', fontSize: '14px', color: '#555'}}>
+                            <strong>Missing:</strong> {gap.missing_dates.join(', ')}
+                          </p>
+                          <p style={{margin: '0 0 5px 0', fontSize: '14px', color: '#555'}}>
+                            <strong>Total consumption:</strong> Meter 1: {gap.total_consumption.meter1}, 
+                            Meter 2: {gap.total_consumption.meter2}, 
+                            Meter 3: {gap.total_consumption.meter3} units
+                          </p>
+                          <p style={{margin: '0', fontSize: '14px', color: '#555'}}>
+                            <strong>Per day:</strong> Meter 1: {gap.per_day_consumption.meter1}, 
+                            Meter 2: {gap.per_day_consumption.meter2}, 
+                            Meter 3: {gap.per_day_consumption.meter3} units each
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <p style={{margin: '0 0 15px 0', fontWeight: 'bold', color: '#d84315'}}>
+                      Total missing days to fill: {gapAnalysis.total_missing_days} days
+                    </p>
+                    
+                    <div style={{display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap'}}>
+                      <button 
+                        onClick={handleFillGaps}
+                        disabled={isFilling}
+                        style={{
+                          background: '#4caf50', 
+                          color: 'white', 
+                          padding: '10px 20px', 
+                          border: 'none', 
+                          borderRadius: '4px', 
+                          cursor: isFilling ? 'not-allowed' : 'pointer',
+                          opacity: isFilling ? 0.6 : 1,
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                      >
+                        {isFilling ? 'Filling...' : '✅ Fill These Gaps'}
+                      </button>
+                      
+                      <button 
+                        onClick={handleAnalyzeGaps}
+                        disabled={isAnalyzing}
+                        style={{
+                          background: '#757575', 
+                          color: 'white', 
+                          padding: '10px 20px', 
+                          border: 'none', 
+                          borderRadius: '4px', 
+                          cursor: isAnalyzing ? 'not-allowed' : 'pointer',
+                          opacity: isAnalyzing ? 0.6 : 1,
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}
+                      >
+                        {isAnalyzing ? 'Analyzing...' : '🔄 Analyze Again'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {gapAnalysis && gapAnalysis.gaps_found === 0 && (
+                  <div>
+                    <p style={{margin: '0 0 15px 0', color: '#2e7d32', fontWeight: 'bold'}}>
+                      ✅ No data gaps detected! Your readings are complete.
+                    </p>
+                    <button 
+                      onClick={handleAnalyzeGaps}
+                      disabled={isAnalyzing}
+                      style={{
+                        background: '#757575', 
+                        color: 'white', 
+                        padding: '10px 20px', 
+                        border: 'none', 
+                        borderRadius: '4px', 
+                        cursor: isAnalyzing ? 'not-allowed' : 'pointer',
+                        opacity: isAnalyzing ? 0.6 : 1,
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      {isAnalyzing ? 'Analyzing...' : '🔄 Analyze Again'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

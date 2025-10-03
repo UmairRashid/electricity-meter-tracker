@@ -116,6 +116,26 @@ class ReadingCreate(BaseModel):
     meter3_current: int
     reading_date: str
 
+class GapInfo(BaseModel):
+    gap_start: str
+    gap_end: str
+    missing_dates: List[str]
+    total_consumption: dict
+    per_day_consumption: dict
+    start_readings: dict
+    end_readings: dict
+
+class GapAnalysisResponse(BaseModel):
+    gaps_found: int
+    gaps: List[GapInfo]
+    total_missing_days: int
+
+class GapFillResponse(BaseModel):
+    success: bool
+    filled_days: int
+    filled_dates: List[str]
+    message: str
+
 class BaseReadingResponse(BaseModel):
     meter1_base: int
     meter2_base: int
@@ -547,6 +567,160 @@ async def delete_old_data(cutoff_date: str, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting old data: {str(e)}")
 
+@app.get("/readings/analyze-gaps")
+async def analyze_data_gaps(db: Session = Depends(get_db)):
+    try:
+        # Get base reading
+        base_reading = db.query(BaseReading).order_by(BaseReading.created_at.desc()).first()
+        
+        if not base_reading:
+            raise HTTPException(status_code=400, detail="No base readings found. Please set base readings first.")
+        
+        # Get all readings from base date onwards, ordered by date
+        readings = db.query(MeterReading).filter(
+            MeterReading.reading_date >= base_reading.base_date
+        ).order_by(MeterReading.reading_date.asc()).all()
+        
+        if len(readings) < 2:
+            return GapAnalysisResponse(gaps_found=0, gaps=[], total_missing_days=0)
+        
+        gaps = []
+        total_missing_days = 0
+        
+        # Check for gaps between consecutive readings
+        for i in range(len(readings) - 1):
+            current_reading = readings[i]
+            next_reading = readings[i + 1]
+            
+            # Calculate days between readings
+            current_date = current_reading.reading_date
+            next_date = next_reading.reading_date
+            days_diff = (next_date - current_date).days
+            
+            # If gap is more than 1 day, we have missing readings
+            if days_diff > 1:
+                missing_dates = []
+                current_temp = current_date
+                
+                # Generate list of missing dates
+                for day_offset in range(1, days_diff):
+                    missing_date = current_temp + timedelta(days=day_offset)
+                    missing_dates.append(missing_date.strftime("%Y-%m-%d"))
+                
+                # Calculate consumption for each meter
+                total_consumption = {
+                    "meter1": next_reading.meter1_current - current_reading.meter1_current,
+                    "meter2": next_reading.meter2_current - current_reading.meter2_current,
+                    "meter3": next_reading.meter3_current - current_reading.meter3_current
+                }
+                
+                # Calculate per-day consumption (equal distribution) - rounded to whole numbers
+                per_day_consumption = {
+                    "meter1": round(total_consumption["meter1"] / days_diff),
+                    "meter2": round(total_consumption["meter2"] / days_diff),
+                    "meter3": round(total_consumption["meter3"] / days_diff)
+                }
+                
+                gap_info = GapInfo(
+                    gap_start=current_date.strftime("%Y-%m-%d"),
+                    gap_end=next_date.strftime("%Y-%m-%d"),
+                    missing_dates=missing_dates,
+                    total_consumption=total_consumption,
+                    per_day_consumption=per_day_consumption,
+                    start_readings={
+                        "meter1": current_reading.meter1_current,
+                        "meter2": current_reading.meter2_current,
+                        "meter3": current_reading.meter3_current
+                    },
+                    end_readings={
+                        "meter1": next_reading.meter1_current,
+                        "meter2": next_reading.meter2_current,
+                        "meter3": next_reading.meter3_current
+                    }
+                )
+                
+                gaps.append(gap_info)
+                total_missing_days += len(missing_dates)
+        
+        return GapAnalysisResponse(
+            gaps_found=len(gaps),
+            gaps=gaps,
+            total_missing_days=total_missing_days
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error analyzing data gaps: {str(e)}")
+
+@app.post("/readings/fill-gaps")
+async def fill_data_gaps(db: Session = Depends(get_db)):
+    try:
+        # First, analyze gaps
+        analysis = await analyze_data_gaps(db)
+        
+        if analysis.gaps_found == 0:
+            return GapFillResponse(
+                success=True,
+                filled_days=0,
+                filled_dates=[],
+                message="No data gaps found to fill."
+            )
+        
+        # Get base reading for consumption calculations
+        base_reading = db.query(BaseReading).order_by(BaseReading.created_at.desc()).first()
+        
+        filled_dates = []
+        filled_days = 0
+        
+        # Fill each gap
+        for gap in analysis.gaps:
+            for i, missing_date in enumerate(gap.missing_dates):
+                parsed_date = datetime.strptime(missing_date, "%Y-%m-%d").date()
+                
+                # Calculate cumulative readings for this missing day
+                # Start from the gap start reading and add incremental consumption
+                days_from_start = i + 1
+                
+                interpolated_meter1 = int(gap.start_readings["meter1"] + (gap.per_day_consumption["meter1"] * days_from_start))
+                interpolated_meter2 = int(gap.start_readings["meter2"] + (gap.per_day_consumption["meter2"] * days_from_start))
+                interpolated_meter3 = int(gap.start_readings["meter3"] + (gap.per_day_consumption["meter3"] * days_from_start))
+                
+                # Calculate consumption from base readings
+                meter1_consumption = interpolated_meter1 - base_reading.meter1_base
+                meter2_consumption = interpolated_meter2 - base_reading.meter2_base
+                meter3_consumption = interpolated_meter3 - base_reading.meter3_base
+                
+                # Check if reading already exists (shouldn't happen, but safety check)
+                existing = db.query(MeterReading).filter(MeterReading.reading_date == parsed_date).first()
+                
+                if not existing:
+                    # Create new interpolated reading
+                    new_reading = MeterReading(
+                        reading_date=parsed_date,
+                        meter1_current=interpolated_meter1,
+                        meter2_current=interpolated_meter2,
+                        meter3_current=interpolated_meter3,
+                        meter1_consumption=meter1_consumption,
+                        meter2_consumption=meter2_consumption,
+                        meter3_consumption=meter3_consumption
+                    )
+                    db.add(new_reading)
+                    filled_dates.append(missing_date)
+                    filled_days += 1
+        
+        # Commit all changes
+        db.commit()
+        
+        return GapFillResponse(
+            success=True,
+            filled_days=filled_days,
+            filled_dates=filled_dates,
+            message=f"Successfully filled {filled_days} missing days with interpolated readings."
+        )
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error filling data gaps: {str(e)}")
+
 @app.get("/readings/{date}")
 async def get_reading_by_date(date: str, db: Session = Depends(get_db)):
     try:
@@ -598,7 +772,143 @@ async def delete_reading_by_date(date: str, db: Session = Depends(get_db)):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error deleting reading: {str(e)}")
+        
+        gaps = []
+        total_missing_days = 0
+        
+        # Check for gaps between consecutive readings
+        for i in range(len(readings) - 1):
+            current_reading = readings[i]
+            next_reading = readings[i + 1]
+            
+            # Calculate days between readings
+            current_date = current_reading.reading_date
+            next_date = next_reading.reading_date
+            days_diff = (next_date - current_date).days
+            
+            # If gap is more than 1 day, we have missing readings
+            if days_diff > 1:
+                missing_dates = []
+                current_temp = current_date
+                
+                # Generate list of missing dates
+                for day_offset in range(1, days_diff):
+                    missing_date = current_temp + timedelta(days=day_offset)
+                    missing_dates.append(missing_date.strftime("%Y-%m-%d"))
+                
+                # Calculate consumption for each meter
+                total_consumption = {
+                    "meter1": next_reading.meter1_current - current_reading.meter1_current,
+                    "meter2": next_reading.meter2_current - current_reading.meter2_current,
+                    "meter3": next_reading.meter3_current - current_reading.meter3_current
+                }
+                
+                # Calculate per-day consumption (equal distribution) - rounded to whole numbers
+                per_day_consumption = {
+                    "meter1": round(total_consumption["meter1"] / days_diff),
+                    "meter2": round(total_consumption["meter2"] / days_diff),
+                    "meter3": round(total_consumption["meter3"] / days_diff)
+                }
+                
+                gap_info = GapInfo(
+                    gap_start=current_date.strftime("%Y-%m-%d"),
+                    gap_end=next_date.strftime("%Y-%m-%d"),
+                    missing_dates=missing_dates,
+                    total_consumption=total_consumption,
+                    per_day_consumption=per_day_consumption,
+                    start_readings={
+                        "meter1": current_reading.meter1_current,
+                        "meter2": current_reading.meter2_current,
+                        "meter3": current_reading.meter3_current
+                    },
+                    end_readings={
+                        "meter1": next_reading.meter1_current,
+                        "meter2": next_reading.meter2_current,
+                        "meter3": next_reading.meter3_current
+                    }
+                )
+                
+                gaps.append(gap_info)
+                total_missing_days += len(missing_dates)
+        
+        return GapAnalysisResponse(
+            gaps_found=len(gaps),
+            gaps=gaps,
+            total_missing_days=total_missing_days
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error analyzing data gaps: {str(e)}")
 
+@app.post("/readings/fill-gaps")
+async def fill_data_gaps(db: Session = Depends(get_db)):
+    try:
+        # First, analyze gaps
+        analysis = await analyze_data_gaps(db)
+        
+        if analysis.gaps_found == 0:
+            return GapFillResponse(
+                success=True,
+                filled_days=0,
+                filled_dates=[],
+                message="No data gaps found to fill."
+            )
+        
+        # Get base reading for consumption calculations
+        base_reading = db.query(BaseReading).order_by(BaseReading.created_at.desc()).first()
+        
+        filled_dates = []
+        filled_days = 0
+        
+        # Fill each gap
+        for gap in analysis.gaps:
+            for i, missing_date in enumerate(gap.missing_dates):
+                parsed_date = datetime.strptime(missing_date, "%Y-%m-%d").date()
+                
+                # Calculate cumulative readings for this missing day
+                # Start from the gap start reading and add incremental consumption
+                days_from_start = i + 1
+                
+                interpolated_meter1 = int(gap.start_readings["meter1"] + (gap.per_day_consumption["meter1"] * days_from_start))
+                interpolated_meter2 = int(gap.start_readings["meter2"] + (gap.per_day_consumption["meter2"] * days_from_start))
+                interpolated_meter3 = int(gap.start_readings["meter3"] + (gap.per_day_consumption["meter3"] * days_from_start))
+                
+                # Calculate consumption from base readings
+                meter1_consumption = interpolated_meter1 - base_reading.meter1_base
+                meter2_consumption = interpolated_meter2 - base_reading.meter2_base
+                meter3_consumption = interpolated_meter3 - base_reading.meter3_base
+                
+                # Check if reading already exists (shouldn't happen, but safety check)
+                existing = db.query(MeterReading).filter(MeterReading.reading_date == parsed_date).first()
+                
+                if not existing:
+                    # Create new interpolated reading
+                    new_reading = MeterReading(
+                        reading_date=parsed_date,
+                        meter1_current=interpolated_meter1,
+                        meter2_current=interpolated_meter2,
+                        meter3_current=interpolated_meter3,
+                        meter1_consumption=meter1_consumption,
+                        meter2_consumption=meter2_consumption,
+                        meter3_consumption=meter3_consumption
+                    )
+                    db.add(new_reading)
+                    filled_dates.append(missing_date)
+                    filled_days += 1
+        
+        # Commit all changes
+        db.commit()
+        
+        return GapFillResponse(
+            success=True,
+            filled_days=filled_days,
+            filled_dates=filled_dates,
+            message=f"Successfully filled {filled_days} missing days with interpolated readings."
+        )
+        
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error filling data gaps: {str(e)}")
 
 @app.get("/health")
 async def health_check(db: Session = Depends(get_db)):

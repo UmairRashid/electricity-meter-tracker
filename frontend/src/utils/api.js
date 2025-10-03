@@ -64,3 +64,9 @@ export const deleteOldData = (cutoffDate) => apiCall(`/readings/delete-old-data?
 export const deleteReadingByDate = (date) => apiCall(`/readings/${date}`, {
   method: 'DELETE',
 })
+
+export const analyzeDataGaps = () => apiCall('/readings/analyze-gaps')
+
+export const fillDataGaps = () => apiCall('/readings/fill-gaps', {
+  method: 'POST',
+})
