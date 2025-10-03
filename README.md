@@ -14,6 +14,7 @@ A microservices-based web application to track daily electricity meter readings 
 - **Usage Analytics**: Daily averages, remaining units, and efficiency scoring
 - **Progress Visualization**: Color-coded progress bars and usage alerts
 - **Data Management**: Delete old data before base readings and remove specific day readings
+- **Data Gap Filling**: Detect and fill missing daily readings by distributing consumption equally across gaps
 - **Database Backup**: Automatic backup on stop with restore functionality
 - **Network Access**: Access from other devices on same Wi-Fi network
 - **Global CLI**: `emt` command for easy management from any directory
@@ -188,10 +189,15 @@ npm run dev
 
 ### Data Management
 1. Go to the Configure page (/configure)
-2. **Delete Specific Day**: Select a specific date from dropdown to remove individual readings
-3. **Delete Old Data**: Remove all readings older than your base date
-4. Both options include confirmation prompts to prevent accidental data loss
-5. This keeps your database clean and focused on current tracking period
+2. **Fill Missing Days**: 
+   - Click "🔍 Analyze Data Gaps" to detect missing daily readings
+   - Review the gap analysis showing missing dates and consumption distribution
+   - Click "✅ Fill These Gaps" to create interpolated readings with equal distribution
+   - Confirmation dialog prevents accidental changes
+3. **Delete Specific Day**: Select a specific date from dropdown to remove individual readings
+4. **Delete Old Data**: Remove all readings older than your base date
+5. All options include confirmation prompts to prevent accidental data loss
+6. This keeps your database clean and focused on current tracking period
 
 ### Database Backup & Restore
 The application automatically creates database backups:
@@ -224,6 +230,8 @@ emt restore
 - `GET /readings/dates` - Get all available reading dates for lookup and deletion
 - `GET /consumption-summary` - Get consumption summary and totals
 - `GET /usage-metrics` - Get comprehensive monthly usage metrics with same-date monthly cycle tracking
+- `GET /readings/analyze-gaps` - **NEW**: Analyze data gaps and calculate equal distribution
+- `POST /readings/fill-gaps` - **NEW**: Fill missing days with interpolated readings
 - `DELETE /readings/{date}` - Delete reading for a specific date
 - `DELETE /readings/delete-old-data` - Delete readings older than specified date
 - `GET /health` - Health check endpoint for monitoring
